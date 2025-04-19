@@ -1,0 +1,39 @@
+// prisma/schema.prisma
+datasource db {
+  provider = "mysql" 
+ url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                String   @id @default(cuid())
+  name              String?
+  email             String   @unique
+  password          String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  twoFactorEnabled  Boolean  @default(false)
+  twoFactorSecret   String?
+  tasks             Task[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  dueDate     DateTime
+  priority    Priority @default(MEDIUM)
+  completed   Boolean  @default(false)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
