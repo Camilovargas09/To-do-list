@@ -1,20 +1,41 @@
 // src/app/login/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import "../styles/book.css";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showTwoFactorInput, setShowTwoFactorInput] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [requiresSetup, setRequiresSetup] = useState(false);
+
+  // Verificar si hay un mensaje de error en la URL
+  useEffect(() => {
+    const errorType = searchParams?.get("error");
+    if (errorType === "TwoFactorRequired") {
+      setShowTwoFactorInput(true);
+      setError(
+        "Por favor, ingresa el código de verificación de tu aplicación autenticadora."
+      );
+    } else if (errorType === "TwoFactorSetupRequired") {
+      setRequiresSetup(true);
+      setError("Necesitas configurar la autenticación de dos factores.");
+    } else if (errorType === "InvalidTwoFactorCode") {
+      setShowTwoFactorInput(true);
+      setError("Código de verificación inválido. Intenta nuevamente.");
+    } else if (errorType) {
+      setError("Error de autenticación. Verifica tus credenciales.");
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,18 +50,38 @@ export default function LoginPage() {
         twoFactorCode: showTwoFactorInput ? twoFactorCode : undefined,
       });
 
+      console.log("Resultado del login:", result);
+
       if (result?.error === "TwoFactorRequired") {
         setShowTwoFactorInput(true);
         setError("");
+        setLoading(false);
+      } else if (result?.error === "TwoFactorSetupRequired") {
+        // Redirigir a la página de configuración de 2FA
+        router.push(`/setup-2fa?email=${encodeURIComponent(email)}`);
+      } else if (result?.error === "InvalidTwoFactorCode") {
+        setShowTwoFactorInput(true);
+        setError("Código de verificación inválido. Intenta nuevamente.");
+        setLoading(false);
       } else if (result?.error) {
-        setError("Credenciales inválidas");
+        setError("Credenciales inválidas. Verifica tu email y contraseña.");
+        setLoading(false);
       } else {
+        // Login exitoso
         router.push("/dashboard");
       }
     } catch (error) {
-      setError("Ocurrió un error al iniciar sesión");
-    } finally {
+      console.error("Error en login:", error);
+      setError("Ocurrió un error al iniciar sesión. Intenta nuevamente.");
       setLoading(false);
+    }
+  };
+
+  const handleSetupTwoFactor = () => {
+    if (email && password) {
+      router.push(`/setup-2fa?email=${encodeURIComponent(email)}`);
+    } else {
+      setError("Por favor ingresa tu email y contraseña primero.");
     }
   };
 
@@ -59,7 +100,19 @@ export default function LoginPage() {
           </div>
         )}
 
-        {!showTwoFactorInput ? (
+        {requiresSetup ? (
+          <div className="text-center text-amber-50">
+            <p className="mb-4">
+              Debes configurar la autenticación de dos factores para continuar.
+            </p>
+            <button
+              onClick={handleSetupTwoFactor}
+              className="rounded-md book-button px-4 py-2 text-white hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-2"
+            >
+              Configurar ahora
+            </button>
+          </div>
+        ) : !showTwoFactorInput ? (
           <form onSubmit={handleSubmit} className="form-container">
             <div className="form-field">
               <label

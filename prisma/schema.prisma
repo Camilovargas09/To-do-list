@@ -1,7 +1,7 @@
 // prisma/schema.prisma
 datasource db {
-  provider = "mysql" 
- url      = env("DATABASE_URL")
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -17,6 +17,7 @@ model User {
   updatedAt         DateTime @updatedAt
   twoFactorEnabled  Boolean  @default(false)
   twoFactorSecret   String?
+  requiresTwoFactor Boolean  @default(false) // Nuevo campo para indicar si debe configurar 2FA
   tasks             Task[]
 }
 

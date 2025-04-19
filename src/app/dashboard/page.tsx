@@ -29,6 +29,47 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
+  // Verificar si el usuario necesita configurar 2FA
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      // Si el usuario requiere configurar 2FA, redirigir a la página de configuración
+      if (session.user.requiresTwoFactor) {
+        router.push(
+          `/setup-2fa?email=${encodeURIComponent(session.user.email || "")}`
+        );
+      } else {
+        // Si es la primera vez que inicia sesión, marcar que debe configurar 2FA
+        const checkFirstLogin = async () => {
+          try {
+            const response = await fetch("/api/check-first-login");
+            const data = await response.json();
+
+            if (data.requiresTwoFactor) {
+              // Actualizar el estado del usuario para requerir 2FA en el próximo inicio de sesión
+              await fetch("/api/update-requires-2fa", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              });
+
+              // Redirigir a la página de configuración de 2FA
+              router.push(
+                `/setup-2fa?email=${encodeURIComponent(
+                  session.user.email || ""
+                )}`
+              );
+            }
+          } catch (error) {
+            console.error("Error al verificar primer inicio de sesión:", error);
+          }
+        };
+
+        checkFirstLogin();
+      }
+    }
+  }, [session, status, router]);
+
   // Redireccionar si no hay sesión
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -50,7 +91,7 @@ export default function DashboardPage() {
       }
     };
 
-    if (session) {
+    if (session && !session.user.requiresTwoFactor) {
       fetchTasks();
     }
   }, [session]);
