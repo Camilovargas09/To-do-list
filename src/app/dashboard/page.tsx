@@ -396,49 +396,39 @@ export default function DashboardPage() {
                       Editar tarea
                     </button>
 
-                    <div className="flex flex-col gap-2">
+                    <div className="flex gap-2 mt-3 text-xs">
                       <button
                         onClick={() =>
                           handleToggleTaskComplete(selectedTask.id)
                         }
-                        className="flex items-center h-5 justify-center px-2 py-1 bg-[#76d7c4] text-white rounded text-sm"
+                        className="px-2 py-1 bg-[#76d7c4] text-white rounded flex items-center"
                       >
+                        <span>Completar</span>
                         <svg
-                          className="w-4 h-4 mr-2"
+                          className="w-2.5 h-2.5 ml-1"
+                          viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
-                          viewBox="0 0 24 24"
+                          strokeWidth="4"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M5 13l4 4L19 7"
-                          ></path>
+                          <path d="M5 12l5 5L20 7" />
                         </svg>
-                        {selectedTask.completed
-                          ? "Marcar como pendiente"
-                          : "Marcar como completada"}
                       </button>
 
                       <button
                         onClick={() => handleDeleteTask(selectedTask.id)}
-                        className="flex items-center h-10 justify-center px-3 py-1 bg-[#ec7063] text-white rounded text-sm"
+                        className="px-2 py-1 bg-[#ec7063] text-white rounded flex items-center"
                       >
+                        <span>Eliminar</span>
                         <svg
-                          className="w-4 h-4 mr-2"
+                          className="w-2.5 h-2.5 ml-1"
+                          viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
-                          viewBox="0 0 24 24"
+                          strokeWidth="4"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M6 18L18 6M6 6l12 12"
-                          ></path>
+                          <path d="M6 18L18 6M6 6l12 12" />
                         </svg>
-                        Eliminar
                       </button>
                     </div>
                   </div>
