@@ -90,6 +90,12 @@ export async function PATCH(
 
     const updates = await request.json();
     
+    // Si hay una fecha en las actualizaciones, asegurarse de que se mantenga correctamente
+    let updatedDueDate;
+    if (updates.dueDate) {
+      updatedDueDate = new Date(updates.dueDate);
+    }
+    
     // Actualizar la tarea
     const task = await prisma.task.update({
       where: {
@@ -98,7 +104,7 @@ export async function PATCH(
       data: {
         ...(updates.title !== undefined && { title: updates.title }),
         ...(updates.description !== undefined && { description: updates.description }),
-        ...(updates.dueDate !== undefined && { dueDate: new Date(updates.dueDate) }),
+        ...(updatedDueDate && { dueDate: updatedDueDate }),
         ...(updates.priority !== undefined && { priority: updates.priority }),
         ...(updates.completed !== undefined && { completed: updates.completed }),
       },

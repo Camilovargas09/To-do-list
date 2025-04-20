@@ -26,6 +26,10 @@ export default function TaskForm({ onTaskAdded }: TaskFormProps) {
     setError("");
 
     try {
+      // Asegurarse de que la fecha se mantenga exactamente como el usuario la ingresa
+      // sin ningún ajuste de zona horaria
+      const dueDateObj = new Date(dueDate + "T00:00:00");
+
       const response = await fetch("/api/tasks", {
         method: "POST",
         headers: {
@@ -34,7 +38,7 @@ export default function TaskForm({ onTaskAdded }: TaskFormProps) {
         body: JSON.stringify({
           title,
           description,
-          dueDate,
+          dueDate: dueDateObj.toISOString(), // Convertir a ISO string para la API
           priority,
         }),
       });

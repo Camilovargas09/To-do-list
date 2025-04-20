@@ -4,21 +4,11 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import {
-  format,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  addDays,
-  isToday,
-  isSameDay,
-  isSameMonth,
-} from "date-fns";
-import { es } from "date-fns/locale";
-import "../styles/book.css";
+import Sidebar from "../components/ui/Sidebar";
+import DailyView from "../components/ui/DailyView";
+import WeeklyView from "../components/ui/WeeklyView";
+import MonthlyView from "../components/ui/MonthlyView";
 import TaskForm from "../components/tasks/TaskForm";
-import TaskList from "../components/tasks/TaskList";
 import { Task } from "@/app/types/task";
 
 export default function DashboardPage() {
@@ -28,47 +18,14 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
-
-  // Verificar si el usuario necesita configurar 2FA
-  useEffect(() => {
-    if (status === "authenticated" && session?.user) {
-      // Si el usuario requiere configurar 2FA, redirigir a la página de configuración
-      if (session.user.requiresTwoFactor) {
-        router.push(
-          `/setup-2fa?email=${encodeURIComponent(session.user.email || "")}`
-        );
-      } else {
-        // Si es la primera vez que inicia sesión, marcar que debe configurar 2FA
-        const checkFirstLogin = async () => {
-          try {
-            const response = await fetch("/api/check-first-login");
-            const data = await response.json();
-
-            if (data.requiresTwoFactor) {
-              // Actualizar el estado del usuario para requerir 2FA en el próximo inicio de sesión
-              await fetch("/api/update-requires-2fa", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-              });
-
-              // Redirigir a la página de configuración de 2FA
-              router.push(
-                `/setup-2fa?email=${encodeURIComponent(
-                  session.user.email || ""
-                )}`
-              );
-            }
-          } catch (error) {
-            console.error("Error al verificar primer inicio de sesión:", error);
-          }
-        };
-
-        checkFirstLogin();
-      }
-    }
-  }, [session, status, router]);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editPriority, setEditPriority] = useState<"HIGH" | "MEDIUM" | "LOW">(
+    "MEDIUM"
+  );
 
   // Redireccionar si no hay sesión
   useEffect(() => {
@@ -91,124 +48,125 @@ export default function DashboardPage() {
       }
     };
 
-    if (session && !session.user.requiresTwoFactor) {
+    if (session) {
       fetchTasks();
     }
   }, [session]);
 
-  // Filtrar tareas según la vista
-  const getFilteredTasks = () => {
-    if (!tasks.length) return [];
+  // Manejador para cuando se selecciona una tarea
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
+    setIsEditing(false);
+  };
 
-    if (view === "daily") {
-      return tasks.filter((task) => {
-        const dueDate = new Date(task.dueDate);
-        return isSameDay(dueDate, selectedDate);
+  // Manejador para cerrar el detalle de tarea
+  const handleCloseTaskDetail = () => {
+    setSelectedTask(null);
+    setIsEditing(false);
+  };
+
+  // Manejar cambios en las tareas
+  const handleTasksChange = (updatedTasks: Task[]) => {
+    setTasks((prev) => {
+      const updatedIds = updatedTasks.map((t) => t.id);
+      const remainingTasks = prev.filter((t) => !updatedIds.includes(t.id));
+      return [...remainingTasks, ...updatedTasks];
+    });
+  };
+
+  // Iniciar edición de tarea
+  const handleStartEdit = () => {
+    if (!selectedTask) return;
+
+    setEditTitle(selectedTask.title);
+    setEditDescription(selectedTask.description || "");
+    setEditDueDate(new Date(selectedTask.dueDate).toISOString().split("T")[0]);
+    setEditPriority(selectedTask.priority);
+    setIsEditing(true);
+  };
+
+  // Guardar edición de tarea
+  const handleSaveEdit = async () => {
+    if (!selectedTask) return;
+
+    try {
+      // Crear objeto de fecha con la fecha exacta seleccionada por el usuario
+      const dueDateObj = new Date(editDueDate + "T00:00:00");
+
+      const response = await fetch(`/api/tasks/${selectedTask.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: editTitle,
+          description: editDescription,
+          dueDate: dueDateObj.toISOString(),
+          priority: editPriority,
+        }),
       });
-    } else if (view === "weekly") {
-      const start = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const end = endOfWeek(selectedDate, { weekStartsOn: 1 });
-      return tasks.filter((task) => {
-        const dueDate = new Date(task.dueDate);
-        return dueDate >= start && dueDate <= end;
-      });
-    } else {
-      const start = startOfMonth(selectedDate);
-      const end = endOfMonth(selectedDate);
-      return tasks.filter((task) => {
-        const dueDate = new Date(task.dueDate);
-        return dueDate >= start && dueDate <= end;
-      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setTasks((prev) =>
+          prev.map((t) => (t.id === selectedTask.id ? result.task : t))
+        );
+        setSelectedTask(result.task);
+        setIsEditing(false);
+      }
+    } catch (error) {
+      console.error("Error updating task:", error);
     }
   };
 
-  // Renderizar la vista de calendario semanal
-  const renderWeeklyCalendar = () => {
-    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-    const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const handleToggleTaskComplete = async (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
 
-    return (
-      <div className="grid grid-cols-7 gap-2">
-        {days.map((day) => (
-          <div
-            key={day.toString()}
-            className={`text-center p-2 cursor-pointer ${
-              isToday(day) ? "bg-amber-100 font-bold" : "hover:bg-amber-50"
-            }`}
-            onClick={() => {
-              setSelectedDate(day);
-              setView("daily");
-            }}
-          >
-            <div className="text-sm font-medium">
-              {format(day, "EEE", { locale: es })}
-            </div>
-            <div>{format(day, "d")}</div>
-            <div className="h-1 mt-1">
-              {tasks.some((task) => isSameDay(new Date(task.dueDate), day)) && (
-                <div className="w-2 h-2 mx-auto rounded-full bg-amber-800"></div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          completed: !task.completed,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setTasks((prev) =>
+          prev.map((t) => (t.id === taskId ? result.task : t))
+        );
+
+        // Actualizar la tarea seleccionada si es la que se está mostrando
+        if (selectedTask && selectedTask.id === taskId) {
+          setSelectedTask(result.task);
+        }
+      }
+    } catch (error) {
+      console.error("Error toggling task completion:", error);
+    }
   };
 
-  // Renderizar la vista de calendario mensual
-  const renderMonthlyCalendar = () => {
-    const monthStart = startOfMonth(selectedDate);
-    const monthEnd = endOfMonth(selectedDate);
-    const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
-    const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
+      });
 
-    const days = [];
-    let day = startDate;
+      if (response.ok) {
+        setTasks((prev) => prev.filter((t) => t.id !== taskId));
 
-    while (day <= endDate) {
-      days.push(day);
-      day = addDays(day, 1);
+        // Cerrar el detalle si es la tarea que se está mostrando
+        if (selectedTask && selectedTask.id === taskId) {
+          setSelectedTask(null);
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting task:", error);
     }
-
-    return (
-      <div>
-        <div className="text-center mb-4 font-bold">
-          {format(selectedDate, "MMMM yyyy", { locale: es })}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((day) => (
-            <div key={day} className="text-center font-medium text-sm p-1">
-              {day}
-            </div>
-          ))}
-          {days.map((day) => (
-            <div
-              key={day.toString()}
-              className={`text-center p-2 cursor-pointer ${
-                !isSameMonth(day, monthStart)
-                  ? "text-gray-400"
-                  : isToday(day)
-                  ? "bg-amber-100 font-bold"
-                  : "hover:bg-amber-50"
-              }`}
-              onClick={() => {
-                setSelectedDate(day);
-                setView("daily");
-              }}
-            >
-              <div>{format(day, "d")}</div>
-              <div className="h-1 mt-1">
-                {tasks.some((task) =>
-                  isSameDay(new Date(task.dueDate), day)
-                ) && (
-                  <div className="w-2 h-2 mx-auto rounded-full bg-amber-800"></div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
   };
 
   if (status === "loading") {
@@ -223,110 +181,272 @@ export default function DashboardPage() {
     return null;
   }
 
-  const filteredTasks = getFilteredTasks();
-
   return (
-    <div className="min-h-screen bg-[#e0d5c1]">
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <div className="book-page relative overflow-hidden">
-          {/* Encabezado de página */}
-          <div className="flex items-center justify-between mb-8 border-b border-amber-800 pb-4">
-            <h1 className="text-3xl font-bold text-amber-900 font-serif">
-              Mi Libro de Tareas
-            </h1>
-            <div className="flex items-center space-x-4">
-              <span className="text-amber-800">
-                Hola, {session.user?.name || session.user?.email}
-              </span>
-              <button
-                onClick={() => router.push("/api/auth/signout")}
-                className="rounded bg-red-600 px-3 py-1 text-sm text-white hover:bg-red-700"
-              >
-                Cerrar sesión
-              </button>
-            </div>
-          </div>
+    <div className="min-h-screen bg-[#e0d5c1] flex">
+      {/* Barra lateral */}
+      <Sidebar view={view} onViewChange={setView} />
 
-          {/* Selector de vista */}
-          <div className="mb-6 flex space-x-4">
+      {/* Contenido principal */}
+      <div className="flex-1 flex flex-col">
+        {/* Encabezado */}
+        <header className="bg-white shadow-md p-4 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-amber-900">
+            Mi Libro de Tareas
+          </h1>
+          <div className="flex items-center space-x-4">
+            <span className="text-amber-800">
+              Hola, {session.user?.name || session.user?.email}
+            </span>
             <button
-              onClick={() => setView("daily")}
-              className={`px-4 py-2 rounded ${
-                view === "daily"
-                  ? "bg-amber-800 text-white"
-                  : "bg-amber-100 text-amber-900 hover:bg-amber-200"
-              }`}
+              onClick={() => router.push("/api/auth/signout")}
+              className="rounded bg-[#ec7063] px-3 py-1 text-sm text-white hover:bg-red-500"
             >
-              Diario
-            </button>
-            <button
-              onClick={() => setView("weekly")}
-              className={`px-4 py-2 rounded ${
-                view === "weekly"
-                  ? "bg-amber-800 text-white"
-                  : "bg-amber-100 text-amber-900 hover:bg-amber-200"
-              }`}
-            >
-              Semanal
-            </button>
-            <button
-              onClick={() => setView("monthly")}
-              className={`px-4 py-2 rounded ${
-                view === "monthly"
-                  ? "bg-amber-800 text-white"
-                  : "bg-amber-100 text-amber-900 hover:bg-amber-200"
-              }`}
-            >
-              Mensual
+              Cerrar sesión
             </button>
           </div>
+        </header>
 
-          {/* Contenido principal */}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="md:col-span-2">
-              <div className="rounded-lg bg-white/80 p-6 shadow">
-                <h2 className="mb-4 text-xl font-semibold text-amber-900">
-                  {view === "daily"
-                    ? `Tareas para el ${format(selectedDate, "dd MMMM yyyy", {
-                        locale: es,
-                      })}`
-                    : view === "weekly"
-                    ? "Tareas de esta semana"
-                    : "Tareas de este mes"}
-                </h2>
-
-                {/* Calendarios */}
-                {view === "weekly" && renderWeeklyCalendar()}
-                {view === "monthly" && renderMonthlyCalendar()}
-
-                {/* Lista de tareas */}
-                <div className="mt-4">
-                  {loading ? (
-                    <p>Cargando tareas...</p>
-                  ) : filteredTasks.length === 0 ? (
-                    <p className="text-amber-800">No hay tareas para mostrar</p>
-                  ) : (
-                    <TaskList
-                      tasks={filteredTasks}
-                      onTasksChange={(updatedTasks) => {
-                        setTasks((prev) => {
-                          // Actualizar la lista completa con las tareas actualizadas
-                          const updatedIds = updatedTasks.map((t) => t.id);
-                          const remainingTasks = prev.filter(
-                            (t) => !updatedIds.includes(t.id)
-                          );
-                          return [...remainingTasks, ...updatedTasks];
-                        });
-                      }}
-                    />
-                  )}
-                </div>
+        {/* Área de contenido principal */}
+        <div className="flex-1 flex">
+          {/* Área de visualización de tareas */}
+          <div className="flex-1 book-page overflow-auto">
+            {loading ? (
+              <div className="flex justify-center items-center h-full">
+                <p className="text-amber-800 text-lg">Cargando tareas...</p>
               </div>
-            </div>
+            ) : (
+              <>
+                {view === "daily" && (
+                  <DailyView
+                    tasks={tasks}
+                    selectedDate={selectedDate}
+                    onDateChange={setSelectedDate}
+                    onTasksChange={handleTasksChange}
+                    onTaskClick={handleTaskClick}
+                  />
+                )}
 
-            <div>
-              <div className="rounded-lg bg-white/80 p-6 shadow">
-                <h2 className="mb-4 text-xl font-semibold text-amber-900">
+                {view === "weekly" && (
+                  <WeeklyView
+                    tasks={tasks}
+                    selectedDate={selectedDate}
+                    onDateChange={setSelectedDate}
+                    onTaskClick={handleTaskClick}
+                  />
+                )}
+
+                {view === "monthly" && (
+                  <MonthlyView
+                    tasks={tasks}
+                    selectedDate={selectedDate}
+                    onDateChange={setSelectedDate}
+                    onTaskClick={handleTaskClick}
+                  />
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Panel lateral para nueva tarea o detalle de tarea seleccionada */}
+          <div className="w-96 bg-white p-6 shadow-md">
+            {selectedTask ? (
+              <div>
+                <div className="flex justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-amber-900">
+                    Detalle de tarea
+                  </h2>
+                  <button
+                    onClick={handleCloseTaskDetail}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {isEditing ? (
+                  // Formulario de edición
+                  <div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-amber-900 mb-1">
+                        Título
+                      </label>
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        className="mt-1 block w-full rounded-md border border-amber-300 px-3 py-2"
+                        required
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-amber-900 mb-1">
+                        Descripción
+                      </label>
+                      <textarea
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        className="mt-1 block w-full rounded-md border border-amber-300 px-3 py-2"
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-amber-900 mb-1">
+                        Fecha de vencimiento
+                      </label>
+                      <input
+                        type="date"
+                        value={editDueDate}
+                        onChange={(e) => setEditDueDate(e.target.value)}
+                        className="mt-1 block w-full rounded-md border border-amber-300 px-3 py-2"
+                        required
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-amber-900 mb-1">
+                        Prioridad
+                      </label>
+                      <select
+                        value={editPriority}
+                        onChange={(e) =>
+                          setEditPriority(
+                            e.target.value as "HIGH" | "MEDIUM" | "LOW"
+                          )
+                        }
+                        className="mt-1 block w-full rounded-md border border-amber-300 px-3 py-2"
+                      >
+                        <option value="HIGH">Alta</option>
+                        <option value="MEDIUM">Media</option>
+                        <option value="LOW">Baja</option>
+                      </select>
+                    </div>
+
+                    <div className="flex space-x-2 mt-6">
+                      <button
+                        onClick={handleSaveEdit}
+                        className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700"
+                      >
+                        Guardar cambios
+                      </button>
+
+                      <button
+                        onClick={() => setIsEditing(false)}
+                        className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Vista de detalles
+                  <div>
+                    <div className="mb-4">
+                      <h3 className="font-bold text-lg">
+                        {selectedTask.title}
+                      </h3>
+                      <div
+                        className={`inline-block px-2 py-1 rounded text-xs mt-2 ${
+                          selectedTask.priority === "HIGH"
+                            ? "bg-red-100 text-red-800"
+                            : selectedTask.priority === "MEDIUM"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {selectedTask.priority === "HIGH"
+                          ? "Alta"
+                          : selectedTask.priority === "MEDIUM"
+                          ? "Media"
+                          : "Baja"}
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <h4 className="font-semibold text-amber-900">
+                        Descripción:
+                      </h4>
+                      <p className="text-gray-700 mt-1">
+                        {selectedTask.description || "Sin descripción"}
+                      </p>
+                    </div>
+
+                    <div className="mb-4">
+                      <h4 className="font-semibold text-amber-900">
+                        Fecha de vencimiento:
+                      </h4>
+                      <p className="text-gray-700 mt-1">
+                        {new Date(selectedTask.dueDate).toLocaleDateString(
+                          "es-ES",
+                          {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          }
+                        )}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleStartEdit}
+                      className="w-full mb-6 px-4 py-2 bg-amber-100 text-amber-800 rounded-md border border-amber-300 hover:bg-amber-200"
+                    >
+                      Editar tarea
+                    </button>
+
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() =>
+                          handleToggleTaskComplete(selectedTask.id)
+                        }
+                        className="flex items-center h-5 justify-center px-2 py-1 bg-[#76d7c4] text-white rounded text-sm"
+                      >
+                        <svg
+                          className="w-4 h-4 mr-2"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M5 13l4 4L19 7"
+                          ></path>
+                        </svg>
+                        {selectedTask.completed
+                          ? "Marcar como pendiente"
+                          : "Marcar como completada"}
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteTask(selectedTask.id)}
+                        className="flex items-center h-10 justify-center px-3 py-1 bg-[#ec7063] text-white rounded text-sm"
+                      >
+                        <svg
+                          className="w-4 h-4 mr-2"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M6 18L18 6M6 6l12 12"
+                          ></path>
+                        </svg>
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <h2 className="text-xl font-semibold text-amber-900 mb-4">
                   Nueva tarea
                 </h2>
                 <TaskForm
@@ -334,8 +454,8 @@ export default function DashboardPage() {
                     setTasks((prev) => [...prev, newTask]);
                   }}
                 />
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </div>
       </div>

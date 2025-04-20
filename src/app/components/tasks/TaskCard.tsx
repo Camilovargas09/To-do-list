@@ -4,14 +4,20 @@
 import { useState } from "react";
 import { format, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
-import { Task } from "@/app/types/task";
 
 type Priority = "HIGH" | "MEDIUM" | "LOW";
 
-// Extendemos el tipo Task para las props específicas del componente
-interface TaskProps extends Omit<Task, "userId"> {
+interface TaskProps {
+  id: string;
+  title: string;
+  description?: string | null;
+  createdAt: Date;
+  dueDate: Date;
+  priority: Priority;
+  completed: boolean;
   onDelete: (id: string) => void;
   onToggleComplete: (id: string) => void;
+  onClick?: () => void;
 }
 
 export default function TaskCard({
@@ -24,6 +30,7 @@ export default function TaskCard({
   completed,
   onDelete,
   onToggleComplete,
+  onClick,
 }: TaskProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -43,15 +50,30 @@ export default function TaskCard({
     LOW: "Baja",
   };
 
+  // Al hacer clic en la tarjeta
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (onClick) {
+      onClick();
+    } else {
+      setExpanded(!expanded);
+    }
+  };
+
+  // Evitar que se propague el clic en botones
+  const handleButtonClick = (e: React.MouseEvent, callback: () => void) => {
+    e.stopPropagation();
+    callback();
+  };
+
   return (
     <div
       className={`mb-4 rounded-lg border task-entry ${
         completed ? "bg-amber-50" : "bg-white"
-      }`}
+      } cursor-pointer`}
+      onClick={handleCardClick}
     >
       <div
-        className={`cursor-pointer rounded-t-lg px-4 py-3 ${priorityColors[priority]} flex items-center justify-between`}
-        onClick={() => setExpanded(!expanded)}
+        className={`rounded-t-lg px-4 py-3 ${priorityColors[priority]} flex items-center justify-between`}
       >
         <h3
           className={`font-medium text-white ${
@@ -61,10 +83,7 @@ export default function TaskCard({
           {title}
         </h3>
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleComplete(id);
-          }}
+          onClick={(e) => handleButtonClick(e, () => onToggleComplete(id))}
           className="ml-2 rounded-full bg-white/80 p-1 hover:bg-white"
         >
           {completed ? (
@@ -152,7 +171,7 @@ export default function TaskCard({
 
           <div className="mt-4 flex justify-end">
             <button
-              onClick={() => onDelete(id)}
+              onClick={(e) => handleButtonClick(e, () => onDelete(id))}
               className="text-sm text-red-600 hover:text-red-800"
             >
               Eliminar

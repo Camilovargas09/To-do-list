@@ -8,9 +8,14 @@ import { Task } from "@/app/types/task";
 interface TaskListProps {
   tasks: Task[];
   onTasksChange?: (tasks: Task[]) => void;
+  onTaskClick?: (task: Task) => void;
 }
 
-export default function TaskList({ tasks, onTasksChange }: TaskListProps) {
+export default function TaskList({
+  tasks,
+  onTasksChange,
+  onTaskClick,
+}: TaskListProps) {
   const [localTasks, setLocalTasks] = useState<Task[]>(tasks);
 
   // Actualizar cuando cambian las props
@@ -68,6 +73,12 @@ export default function TaskList({ tasks, onTasksChange }: TaskListProps) {
     }
   };
 
+  const handleTaskClick = (task: Task) => {
+    if (onTaskClick) {
+      onTaskClick(task);
+    }
+  };
+
   if (!localTasks.length) {
     return (
       <div className="text-amber-800 italic py-4 text-center">
@@ -77,7 +88,7 @@ export default function TaskList({ tasks, onTasksChange }: TaskListProps) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {localTasks.map((task) => (
         <TaskCard
           key={task.id}
@@ -90,6 +101,7 @@ export default function TaskList({ tasks, onTasksChange }: TaskListProps) {
           completed={task.completed}
           onToggleComplete={handleToggleComplete}
           onDelete={handleDelete}
+          onClick={() => handleTaskClick(task)}
         />
       ))}
     </div>

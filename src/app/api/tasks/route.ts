@@ -60,11 +60,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Asegurarnos de preservar la fecha exacta que envió el cliente
+    // sin ajustes de zona horaria al guardar en la base de datos
+    const dueDateForDB = new Date(dueDate);
+    
     const task = await prisma.task.create({
       data: {
         title,
         description,
-        dueDate: new Date(dueDate),
+        dueDate: dueDateForDB,
         priority: priority || 'MEDIUM',
         userId: session.user.id,
       },
