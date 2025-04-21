@@ -29,10 +29,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verificar si el usuario ya tiene 2FA habilitado
+    // Si el usuario ya tiene 2FA habilitado, no es necesario configurarlo
     if (user.twoFactorEnabled) {
       return NextResponse.json(
         { requiresTwoFactor: false },
+        { status: 200 }
+      );
+    }
+
+    // Si ya se marcó que requiere 2FA, mantener ese estado
+    if (user.requiresTwoFactor) {
+      return NextResponse.json(
+        { requiresTwoFactor: true },
         { status: 200 }
       );
     }
@@ -41,11 +49,20 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const accountAge = now.getTime() - user.createdAt.getTime();
     
-    // Si la cuenta tiene menos de 1 hora y no tiene 2FA, consideramos que es el primer login
-    const isFirstLogin = accountAge < 60 * 60 * 1000; // 1 hora en milisegundos
+    // Si la cuenta tiene más de 24 horas y no tiene 2FA, consideramos que NO es el primer login
+    // y por lo tanto debe configurar 2FA
+    const isFirstLogin = accountAge < 24 * 60 * 60 * 1000; // 24 horas en milisegundos
     
-    // También podemos usar la bandera requiresTwoFactor
-    const needsSetup = isFirstLogin || user.requiresTwoFactor;
+    // Si NO es el primer login y no tiene 2FA habilitado, debe configurarlo
+    const needsSetup = !isFirstLogin;
+
+    // Si necesita configurar 2FA, actualizar el estado en la base de datos
+    if (needsSetup) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { requiresTwoFactor: true }
+      });
+    }
 
     return NextResponse.json(
       { requiresTwoFactor: needsSetup },

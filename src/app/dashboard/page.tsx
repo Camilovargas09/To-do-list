@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [editPriority, setEditPriority] = useState<"HIGH" | "MEDIUM" | "LOW">(
     "MEDIUM"
   );
+  const [checkingTwoFactor, setCheckingTwoFactor] = useState(false);
 
   // Redireccionar si no hay sesión
   useEffect(() => {
@@ -34,24 +35,51 @@ export default function DashboardPage() {
     }
   }, [status, router]);
 
-  // Cargar tareas
+  // Verificar si el usuario necesita configurar 2FA
   useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        const response = await fetch("/api/tasks");
-        const data = await response.json();
-        setTasks(data.tasks);
-      } catch (error) {
-        console.error("Error loading tasks:", error);
-      } finally {
-        setLoading(false);
+    const checkTwoFactorRequirement = async () => {
+      if (status === "authenticated" && session?.user && !checkingTwoFactor) {
+        setCheckingTwoFactor(true);
+
+        try {
+          // Verificar si el usuario necesita configurar 2FA
+          const response = await fetch("/api/check-first-login");
+          const data = await response.json();
+
+          if (response.ok && data.requiresTwoFactor) {
+            // Redirigir a la página de configuración de 2FA
+            router.push(
+              `/setup-2fa?email=${encodeURIComponent(
+                session.user.email || ""
+              )}&requiresSetup=true`
+            );
+            return;
+          }
+        } catch (error) {
+          console.error("Error checking 2FA requirement:", error);
+          // Continuar con la carga normal en caso de error
+        }
+
+        // Solo cargar las tareas si no se requiere configuración de 2FA
+        fetchTasks();
       }
     };
 
-    if (session) {
-      fetchTasks();
+    checkTwoFactorRequirement();
+  }, [session, status, router, checkingTwoFactor]);
+
+  // Cargar tareas
+  const fetchTasks = async () => {
+    try {
+      const response = await fetch("/api/tasks");
+      const data = await response.json();
+      setTasks(data.tasks);
+    } catch (error) {
+      console.error("Error loading tasks:", error);
+    } finally {
+      setLoading(false);
     }
-  }, [session]);
+  };
 
   // Manejador para cuando se selecciona una tarea
   const handleTaskClick = (task: Task) => {
