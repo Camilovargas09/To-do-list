@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     // Si NO es el primer login y no tiene 2FA habilitado, debe configurarlo
     const needsSetup = !isFirstLogin;
 
-    // Si necesita configurar 2FA, actualizar el estado en la base de datos
+    // Si necesita configurar 2FA, actualiza el estado en la base de datos
     if (needsSetup) {
       await prisma.user.update({
         where: { id: user.id },
